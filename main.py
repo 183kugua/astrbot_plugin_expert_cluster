@@ -113,7 +113,7 @@ def _safe_float(
     "astrbot_plugin_expert_cluster",
     "kugua",
     "专家集群：为主 Agent 配备可随时咨询与会诊的专家团队",
-    "1.1.0",
+    "1.3.0",
 )
 class ExpertClusterPlugin(Star):
     """专家集群插件主类。"""
@@ -193,6 +193,9 @@ class ExpertClusterPlugin(Star):
         self._semaphore = asyncio.Semaphore(self.panel_max_parallel)
         # 各会话最近一次会议纪要（预留调试查看）
         self._last_panels: dict[str, dict] = {}
+        # 专家工具集缓存：首次构建后复用，避免每次咨询重复扫描全局工具
+        self._tool_set_built: bool = False
+        self._cached_tool_set: ToolSet | None = None
 
         self.experts: dict[str, Expert] = {}
         self._load_experts(cfg.get("experts", []))
@@ -300,9 +303,17 @@ class ExpertClusterPlugin(Star):
 
     @property
     def _stats_path(self):
-        from pathlib import Path
+        try:
+            from astrbot.core.star.star_tools import StarTools
 
-        return Path("data") / "expert_cluster_stats.json"
+            return StarTools.get_data_dir("astrbot_plugin_expert_cluster") / (
+                "stats.json"
+            )
+        except Exception:
+            # 环境异常时回退到相对路径，保持向后兼容（迁移旧数据）
+            from pathlib import Path
+
+            return Path("data") / "expert_cluster_stats.json"
 
     def _load_persisted_stats(self) -> None:
         """启动时恢复各专家累计咨询次数（persist_stats 开启时）。"""
@@ -315,8 +326,12 @@ class ExpertClusterPlugin(Star):
             if isinstance(calls, dict):
                 for key, count in calls.items():
                     expert = self.experts.get(str(key).casefold())
-                    if expert is not None and isinstance(count, int) and count > 0:
-                        expert.total_calls = count
+                    try:
+                        cnt = int(count)  # type: ignore[arg-type]
+                    except (TypeError, ValueError):
+                        continue
+                    if expert is not None and cnt > 0:
+                        expert.total_calls = cnt
         except FileNotFoundError:
             pass
         except Exception as e:
@@ -337,13 +352,18 @@ class ExpertClusterPlugin(Star):
         except Exception as e:
             logger.warning("保存统计文件失败，已忽略：%s", e)
 
-    async def _get_recent_context(self, event: AstrMessageEvent) -> str:
+    async def _get_recent_context(
+        self, event: AstrMessageEvent, question: str = ""
+    ) -> str:
         """按配置截取最近几条会话记录，拼为附加给专家的上下文文本。
 
+        会过滤掉内容与本次 question 重复的用户消息（llm_tool 触发时
+        history 往往已包含当前提问），避免同一问题注入两遍。
         任何一步失败都静默返回空串，绝不影响正常咨询。
         """
         if self.include_context_count <= 0:
             return ""
+        q_head = (question or "").strip()[:100]
         try:
             mgr = self.context.conversation_manager
             umo = event.unified_msg_origin
@@ -358,6 +378,11 @@ class ExpertClusterPlugin(Star):
                 if isinstance(m, dict)
                 and m.get("role") in ("user", "assistant")
                 and str(m.get("content") or "").strip()
+                and not (
+                    q_head
+                    and m.get("role") == "user"
+                    and q_head in str(m.get("content") or "")
+                )
             ][-self.include_context_count :]
             if not recent:
                 return ""
@@ -374,19 +399,19 @@ class ExpertClusterPlugin(Star):
             logger.debug("获取会话上下文失败，跳过注入：%s", e)
             return ""
 
-    def _resolve_panel_targets(self, selector: str | None = None) -> list[Expert]:
-        """把逗号分隔的参会名单解析为专家列表。
+    def _parse_panel_selector(
+        self, selector: str, *, strict: bool = False
+    ) -> tuple[list[Expert], list[str]]:
+        """把逗号分隔的参会名单解析为 (targets, unmatched)。
 
-        支持专家 name 或分组 tag（如 "coder" 或 "dev"）；
-        无法匹配的项静默跳过。selector 留空时使用 panel_default_experts，
-        再留空则为全体专家。
+        支持专家 name 与分组 tag 混合填写，结果自动去重。
+        - strict=False（/panel 命令语义）：未匹配项静默跳过；
+        - strict=True（convene_expert_panel 显式名单）：未匹配项计入
+          unmatched，由调用方决定是否报错。
         """
-        selector = (selector or self.panel_default_experts or "").strip()
-        all_experts = list(self.experts.values())
-        if not selector:
-            return all_experts
-
         targets: list[Expert] = []
+        unmatched: list[str] = []
+        all_experts = list(self.experts.values())
         for raw in selector.split(","):
             token = raw.strip().casefold()
             if not token:
@@ -402,7 +427,22 @@ class ExpertClusterPlugin(Star):
                     matched = True
                     targets.append(e)
             if not matched:
-                logger.warning("参会名单项 '%s' 未匹配到任何专家或标签，已跳过", token)
+                unmatched.append(token)
+        return targets, unmatched
+
+    def _resolve_panel_targets(self, selector: str | None = None) -> list[Expert]:
+        """把逗号分隔的参会名单解析为专家列表。
+
+        支持专家 name 或分组 tag（如 "coder" 或 "dev"）；
+        无法匹配的项静默跳过。selector 留空时使用 panel_default_experts，
+        再留空则为全体专家。
+        """
+        selector = (selector or self.panel_default_experts or "").strip()
+        if not selector:
+            return list(self.experts.values())
+        targets, _unmatched = self._parse_panel_selector(selector)
+        for token in _unmatched:
+            logger.warning("参会名单项 '%s' 未匹配到任何专家或标签，已跳过", token)
         return targets
 
     async def _resolve_provider_id(
@@ -445,6 +485,10 @@ class ExpertClusterPlugin(Star):
         """
         if ToolSet is None or not self.expert_tools_enabled:
             return None
+        # 惰性缓存：本插件的 llm_tool 在插件加载完成前可能尚未注册，
+        # 延迟到首次真实咨询时构建最稳妥，之后直接复用
+        if self._tool_set_built:
+            return self._cached_tool_set
         names = [n.strip() for n in self.expert_tool_names_raw.split(",") if n.strip()]
         if not names:
             return None
@@ -476,7 +520,10 @@ class ExpertClusterPlugin(Star):
             logger.warning(
                 "expert_tool_names 中未注册的工具已跳过：%s", "、".join(missing)
             )
-        return None if tool_set.empty() else tool_set
+        result = None if tool_set.empty() else tool_set
+        self._cached_tool_set = result
+        self._tool_set_built = True
+        return result
 
     async def _ask_expert(
         self, event: AstrMessageEvent, expert: Expert, question: str
@@ -495,7 +542,7 @@ class ExpertClusterPlugin(Star):
             extra_kwargs["temperature"] = self.expert_temperature
 
         # 可选：附带最近会话记录，让专家了解对话背景
-        prompt = question + await self._get_recent_context(event)
+        prompt = question + await self._get_recent_context(event, question)
 
         # 专家工具：可用时走 tool_loop_agent 完整工具循环
         tool_set = self._build_expert_tool_set()
@@ -767,7 +814,9 @@ class ExpertClusterPlugin(Star):
             self._get_total(event),
             self.max_consults_per_event,
         )
-        return await self._ask_expert(event, expert, question)
+        result = await self._ask_expert(event, expert, question)
+        self._save_persisted_stats()
+        return result
 
     # ------------------------------------------------------------------ #
     # LLM 工具：convene_expert_panel
@@ -803,22 +852,12 @@ class ExpertClusterPlugin(Star):
         # 确定参会名单
         targets: list[Expert]
         if expert_names and expert_names.strip():
-            targets = []
-            missing: list[str] = []
-            for raw_name in expert_names.split(","):
-                name = raw_name.strip()
-                if not name:
-                    continue
-                expert = self._find_expert(name)
-                if expert is None:
-                    missing.append(name)
-                elif all(expert.name != t.name for t in targets):
-                    targets.append(expert)
-            if missing:
+            targets, unmatched = self._parse_panel_selector(expert_names, strict=True)
+            if unmatched:
                 available = ", ".join(e.name for e in self.experts.values())
                 return (
-                    f"{_ERROR_PREFIX} 以下专家不存在：{', '.join(missing)}。"
-                    f"可用专家：{available}"
+                    f"{_ERROR_PREFIX} 以下名称既不是专家名也不是分组标签："
+                    f"{', '.join(unmatched)}。可用专家：{available}"
                 )
         else:
             # 留空时按 panel_default_experts 配置，再留空则为全体
@@ -851,17 +890,33 @@ class ExpertClusterPlugin(Star):
             opinion = await self._ask_expert(event, expert, question)
             return expert, opinion
 
-        results = await asyncio.gather(*(_consult(e) for e in targets))
+        results_raw = await asyncio.gather(
+            *(_consult(e) for e in targets), return_exceptions=True
+        )
+        results = [r for r in results_raw if isinstance(r, tuple)]
+        failed_n = len(results_raw) - len(results)
+        self._save_persisted_stats()
+        if not results:
+            return (
+                f"{_ERROR_PREFIX} 会议失败：{failed_n} 位专家全部因系统异常未能作答，"
+                "请稍后重试或直接自行回答。"
+            )
         logger.info(
             "专家会议结束：%s（事件累计 %d/%d）",
             "、".join(e.display_name for e, _ in results),
             self._get_total(event),
             self.max_consults_per_event,
         )
-        return (
+        header = (
             f"以下是 {len(results)} 位专家对同一问题的独立意见，"
-            "请你综合后给出最终回答：\n\n" + self._format_opinions(list(results))
+            "请你综合后给出最终回答：\n\n"
         )
+        if failed_n:
+            header += (
+                f"（另有 {failed_n} 位专家因系统异常未能给出意见，"
+                "请仅基于以下成功意见综合。）\n\n"
+            )
+        return header + self._format_opinions(list(results))
 
     # ------------------------------------------------------------------ #
     # 聊天指令：/experts
@@ -942,7 +997,20 @@ class ExpertClusterPlugin(Star):
             opinion = await self._ask_expert(event, expert, text)
             return expert, opinion
 
-        results = await asyncio.gather(*(_consult(e) for e in targets))
+        results_raw = await asyncio.gather(
+            *(_consult(e) for e in targets), return_exceptions=True
+        )
+        results = [r for r in results_raw if isinstance(r, tuple)]
+        failed_n = len(results_raw) - len(results)
+        self._save_persisted_stats()
+        if not results:
+            yield event.plain_result(
+                f"会议失败：{failed_n} 位专家全部因系统异常未能作答，请稍后重试喵。"
+            )
+            return
+        failed_note = (
+            f"\n（另有 {failed_n} 位专家因系统异常未能发言）" if failed_n else ""
+        )
         opinions_text = self._format_opinions(list(results))
 
         # 主持人汇总；失败时回退为原始意见拼接
@@ -962,7 +1030,7 @@ class ExpertClusterPlugin(Star):
             f"———————\n"
             f"{summary_text}\n"
             f"———————\n"
-            f"参会：{'、'.join(e.display_name for e, _ in results)}"
+            f"参会：{'、'.join(e.display_name for e, _ in results)}{failed_note}"
             f"（用时 {elapsed:.1f}s）"
         )
 

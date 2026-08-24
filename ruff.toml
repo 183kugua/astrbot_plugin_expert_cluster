@@ -1,0 +1,7 @@
+# 插件以"附加功能绝不拖垮主流程"为原则，
+# 边界处统一捕获 Exception 并记录日志/静默降级，属合理容错。
+[lint]
+ignore = ["BLE001"]
+
+[format]
+quote-style = "double"
