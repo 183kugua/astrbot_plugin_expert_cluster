@@ -26,6 +26,8 @@
 | `list_experts` | 列出所有专家的名称、擅长领域与本次对话的配额使用情况 |
 | `consult_expert` | 向指定专家提出一个自包含问题，返回专家的专业回答 |
 | `convene_expert_panel` | 召开专家会议：并行咨询多位（默认全体）专家，返回各方独立意见，由主 Agent 汇总最终答案 |
+| `search_experts` | 按关键词搜索专家（匹配名称/擅长领域/标签），专家较多时快速定位合适人选 |
+| `get_expert_usage` | 查询配额与用量统计：本次对话剩余额度、各专家累计咨询次数 |
 
 所有系统级失败均以 `[EXPERT_ERROR]` 前缀返回，工具描述中已引导 LLM 将其与专家正常回答区分，触发自我修复逻辑（换专家 / 自行作答）。
 
@@ -50,6 +52,15 @@
 | `panel_max_parallel` | int | 3 | 会诊最大并发数（信号量限流，防 API 限流） |
 | `panel_style` | string | balanced | 会议汇总风格：balanced / critical / concise |
 | `panel_render_image` | bool | false | 会议纪要是否渲染为图片（失败自动回退纯文本） |
+| `expert_temperature` | float | 1.0 | 专家生成温度：0=严谨 1=均衡 2=发散；-1 表示不向模型传递该参数 |
+| `retry_on_failure` | int | 1 | 专家调用失败自动重试次数（0-3）；超时不重试，避免等待翻倍 |
+| `include_context_count` | int | 0 | 咨询时自动附带最近 N 条会话记录供专家理解背景（0=关闭） |
+| `persist_stats` | bool | true | 累计统计写入 data/expert_cluster_stats.json，重启不丢失 |
+| `panel_default_experts` | string | 空 | /panel 默认参会名单（name 或 tag，逗号分隔）；留空为全体 |
+| `max_panel_size` | int | 8 | 单场会议参会上限，防止 token 失控 |
+| `panel_timeout_multiplier` | float | 2.0 | 汇总阶段超时 = 单次咨询超时 × 该倍率 |
+| `summary_provider_id` | string | 空 | 主持人汇总使用的独立对话模型 ID；留空跟随当前会话 |
+| `summary_model` | string | 空 | 汇总强制指定的模型名；配合上一项使用 |
 
 ### 专家字段
 
@@ -63,6 +74,7 @@
 | `system_prompt` | ✅ | 专家的系统提示词 |
 | `provider_id` | - | 指定对话模型 ID（WebUI 模型服务页可见），留空用当前会话模型 |
 | `model` | - | 强制指定模型名，留空用 Provider 默认 |
+| `tags` | - | 分组标签（逗号分隔），如 `dev,quality`；convene_expert_panel 与 /panel 可按标签召集整组专家 |
 
 > 兼容说明：若直接编辑配置文件，`experts` 也接受 JSON 数组字符串形式。
 
@@ -70,7 +82,7 @@
 
 - **全局熔断**：单次对话咨询总次数达到 `max_consults_per_event` 后拒绝新咨询
 - **单专家限额**：同一专家单次对话最多被咨询 `max_calls_per_expert` 次
-- **超时控制**：单次咨询超时自动取消；会议汇总超时为 2 倍
+- **超时控制**：单次咨询超时自动取消；会议汇总超时可按 `panel_timeout_multiplier` 倍率调节（默认 2 倍）
 - **长度限制**：超长问题直接拒绝
 - **并发限流**：信号量限制同时向模型发起的请求数
 - **配额预检**：先校验目标存在性与配额，再扣减计数，避免无效消耗

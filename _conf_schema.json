@@ -9,48 +9,164 @@
         "name": "翻译专家（预置模板）",
         "display_item": "display_name",
         "items": {
-          "name": { "description": "唯一标识（工具调用用，建议英文小写）", "type": "string", "default": "translator" },
-          "display_name": { "description": "展示名", "type": "string", "default": "翻译专家" },
-          "description": { "description": "擅长领域（主模型据此决定咨询谁）", "type": "string", "default": "精通多语种互译，熟悉本地化与文化差异" },
-          "system_prompt": { "description": "专家系统提示词", "type": "text", "default": "你是一位资深翻译专家，精通中英日等多语种。回答时先给出译文，再简要说明关键翻译取舍。" },
-          "provider_id": { "description": "指定对话模型 ID（留空用会话默认）", "type": "string", "default": "" },
-          "model": { "description": "强制指定模型名（留空用默认）", "type": "string", "default": "" }
+          "name": {
+            "description": "唯一标识（工具调用用，建议英文小写）",
+            "type": "string",
+            "default": "translator"
+          },
+          "display_name": {
+            "description": "展示名",
+            "type": "string",
+            "default": "翻译专家"
+          },
+          "description": {
+            "description": "擅长领域（主模型据此决定咨询谁）",
+            "type": "string",
+            "default": "精通多语种互译，熟悉本地化与文化差异"
+          },
+          "system_prompt": {
+            "description": "专家系统提示词",
+            "type": "text",
+            "default": "你是一位资深翻译专家，精通中英日等多语种。回答时先给出译文，再简要说明关键翻译取舍。"
+          },
+          "provider_id": {
+            "description": "指定对话模型 ID（留空用会话默认）",
+            "type": "string",
+            "default": ""
+          },
+          "model": {
+            "description": "强制指定模型名（留空用默认）",
+            "type": "string",
+            "default": ""
+          },
+          "tags": {
+            "description": "分组标签（逗号分隔，可选）",
+            "type": "string",
+            "default": ""
+          }
         }
       },
       "coder": {
         "name": "代码专家（预置模板）",
         "display_item": "display_name",
         "items": {
-          "name": { "description": "唯一标识（工具调用用，建议英文小写）", "type": "string", "default": "coder" },
-          "display_name": { "description": "展示名", "type": "string", "default": "代码专家" },
-          "description": { "description": "擅长领域（主模型据此决定咨询谁）", "type": "string", "default": "擅长编程、调试、架构设计与代码审查" },
-          "system_prompt": { "description": "专家系统提示词", "type": "text", "default": "你是一位资深软件工程师。回答时给出可直接运行的代码，并解释关键设计决策。" },
-          "provider_id": { "description": "指定对话模型 ID（留空用会话默认）", "type": "string", "default": "" },
-          "model": { "description": "强制指定模型名（留空用默认）", "type": "string", "default": "" }
+          "name": {
+            "description": "唯一标识（工具调用用，建议英文小写）",
+            "type": "string",
+            "default": "coder"
+          },
+          "display_name": {
+            "description": "展示名",
+            "type": "string",
+            "default": "代码专家"
+          },
+          "description": {
+            "description": "擅长领域（主模型据此决定咨询谁）",
+            "type": "string",
+            "default": "擅长编程、调试、架构设计与代码审查"
+          },
+          "system_prompt": {
+            "description": "专家系统提示词",
+            "type": "text",
+            "default": "你是一位资深软件工程师。回答时给出可直接运行的代码，并解释关键设计决策。"
+          },
+          "provider_id": {
+            "description": "指定对话模型 ID（留空用会话默认）",
+            "type": "string",
+            "default": ""
+          },
+          "model": {
+            "description": "强制指定模型名（留空用默认）",
+            "type": "string",
+            "default": ""
+          },
+          "tags": {
+            "description": "分组标签（逗号分隔，可选）",
+            "type": "string",
+            "default": "dev"
+          }
         }
       },
       "reviewer": {
         "name": "审稿专家（预置模板）",
         "display_item": "display_name",
         "items": {
-          "name": { "description": "唯一标识（工具调用用，建议英文小写）", "type": "string", "default": "reviewer" },
-          "display_name": { "description": "展示名", "type": "string", "default": "审稿专家" },
-          "description": { "description": "擅长领域（主模型据此决定咨询谁）", "type": "string", "default": "擅长事实核查、逻辑漏洞与表达问题审查" },
-          "system_prompt": { "description": "专家系统提示词", "type": "text", "default": "你是一位严格的审稿人。对给定内容进行事实核查与逻辑审查，逐条列出问题与改进建议，按严重程度排序。" },
-          "provider_id": { "description": "指定对话模型 ID（留空用会话默认）", "type": "string", "default": "" },
-          "model": { "description": "强制指定模型名（留空用默认）", "type": "string", "default": "" }
+          "name": {
+            "description": "唯一标识（工具调用用，建议英文小写）",
+            "type": "string",
+            "default": "reviewer"
+          },
+          "display_name": {
+            "description": "展示名",
+            "type": "string",
+            "default": "审稿专家"
+          },
+          "description": {
+            "description": "擅长领域（主模型据此决定咨询谁）",
+            "type": "string",
+            "default": "擅长事实核查、逻辑漏洞与表达问题审查"
+          },
+          "system_prompt": {
+            "description": "专家系统提示词",
+            "type": "text",
+            "default": "你是一位严格的审稿人。对给定内容进行事实核查与逻辑审查，逐条列出问题与改进建议，按严重程度排序。"
+          },
+          "provider_id": {
+            "description": "指定对话模型 ID（留空用会话默认）",
+            "type": "string",
+            "default": ""
+          },
+          "model": {
+            "description": "强制指定模型名（留空用默认）",
+            "type": "string",
+            "default": ""
+          },
+          "tags": {
+            "description": "分组标签（逗号分隔，可选）",
+            "type": "string",
+            "default": "dev,quality"
+          }
         }
       },
       "custom": {
         "name": "空白专家（自定义模板）",
         "display_item": "display_name",
         "items": {
-          "name": { "description": "唯一标识（工具调用用，建议英文小写）", "type": "string", "default": "" },
-          "display_name": { "description": "展示名", "type": "string", "default": "" },
-          "description": { "description": "擅长领域（主模型据此决定咨询谁）", "type": "string", "default": "" },
-          "system_prompt": { "description": "专家系统提示词", "type": "text", "default": "" },
-          "provider_id": { "description": "指定对话模型 ID（留空用会话默认）", "type": "string", "default": "" },
-          "model": { "description": "强制指定模型名（留空用默认）", "type": "string", "default": "" }
+          "name": {
+            "description": "唯一标识（工具调用用，建议英文小写）",
+            "type": "string",
+            "default": ""
+          },
+          "display_name": {
+            "description": "展示名",
+            "type": "string",
+            "default": ""
+          },
+          "description": {
+            "description": "擅长领域（主模型据此决定咨询谁）",
+            "type": "string",
+            "default": ""
+          },
+          "system_prompt": {
+            "description": "专家系统提示词",
+            "type": "text",
+            "default": ""
+          },
+          "provider_id": {
+            "description": "指定对话模型 ID（留空用会话默认）",
+            "type": "string",
+            "default": ""
+          },
+          "model": {
+            "description": "强制指定模型名（留空用默认）",
+            "type": "string",
+            "default": ""
+          },
+          "tags": {
+            "description": "分组标签（逗号分隔，可选）",
+            "type": "string",
+            "default": ""
+          }
         }
       }
     },
@@ -89,7 +205,11 @@
   "panel_style": {
     "description": "会议汇总风格",
     "type": "string",
-    "options": ["balanced", "critical", "concise"],
+    "options": [
+      "balanced",
+      "critical",
+      "concise"
+    ],
     "hint": "balanced=综合各方意见；critical=交叉质询后给出严谨结论；concise=只保留精简结论。仅影响 /panel 指令的主持人汇总。",
     "default": "balanced"
   },
@@ -98,5 +218,59 @@
     "type": "bool",
     "hint": "开启后 /panel 的会议纪要以图片发送（依赖文转图服务），失败自动回退纯文本。",
     "default": false
+  },
+  "expert_temperature": {
+    "description": "专家生成温度",
+    "type": "float",
+    "hint": "0=最严谨，1=均衡，2=最发散。设为 -1 表示不向模型传递该参数（跟随服务商默认值）。",
+    "default": 1.0
+  },
+  "retry_on_failure": {
+    "description": "失败自动重试次数",
+    "type": "int",
+    "hint": "专家调用出错时的自动重试次数（0-3）。超时不重试，避免等待时间翻倍。",
+    "default": 1
+  },
+  "include_context_count": {
+    "description": "咨询附带会话上下文条数",
+    "type": "int",
+    "hint": "咨询专家时自动附带最近 N 条对话记录供其理解背景（每条截断 500 字符）。0=关闭；默认关闭时问题必须是自包含的。",
+    "default": 0
+  },
+  "persist_stats": {
+    "description": "统计持久化",
+    "type": "bool",
+    "hint": "开启后各专家累计咨询次数保存到 data/expert_cluster_stats.json，重启插件不丢失。",
+    "default": true
+  },
+  "panel_default_experts": {
+    "description": "/panel 默认参会名单",
+    "type": "string",
+    "hint": "逗号分隔的专家 name 或分组 tag，如 \"coder,reviewer\" 或 \"dev\"。留空表示全体专家参加。",
+    "default": ""
+  },
+  "max_panel_size": {
+    "description": "单场会议参会上限",
+    "type": "int",
+    "hint": "/panel 与 convene_expert_panel 的单场会议最多参会人数，防止 token 失控。",
+    "default": 8
+  },
+  "panel_timeout_multiplier": {
+    "description": "汇总阶段超时倍率",
+    "type": "float",
+    "hint": "主持人汇总结论的超时时间 = 单次咨询超时 × 该倍率。",
+    "default": 2.0
+  },
+  "summary_provider_id": {
+    "description": "汇总使用的对话模型 ID（可选）",
+    "type": "string",
+    "hint": "为 /panel 主持人指定独立的对话提供者；留空则使用当前会话的对话模型。",
+    "default": ""
+  },
+  "summary_model": {
+    "description": "汇总强制指定模型名（可选）",
+    "type": "string",
+    "hint": "配合上一项使用；留空用该 Provider 的默认模型。",
+    "default": ""
   }
 }
