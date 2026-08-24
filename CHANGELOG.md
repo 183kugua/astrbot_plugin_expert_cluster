@@ -2,6 +2,24 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [v1.2.0] - 2026-08-24
+
+### 新增 · 专家函数工具
+
+- **专家可携带工具作答** (`expert_tools_enabled`, 默认开启)：专家咨询升级为 `tool_loop_agent` 完整工具循环，可在回答前调用函数工具查证信息；工具集为空或获取失败时自动回退原纯文本模式
+- **专家工具白名单** (`expert_tool_names`)：逗号分隔的专家可用全局工具名，默认为本插件三个只读信息工具（`list_experts` / `search_experts` / `get_expert_usage`）
+- **循环步数上限** (`expert_max_tool_steps`, 默认 5)：限制每位专家单次咨询的工具调用轮数（1-20），防止 token 失控
+- **防递归硬保护**：`consult_expert` 与 `convene_expert_panel` 强制排除在专家工具名单之外，即使误配也会自动剔除并记录警告；已在 WebUI 停用的工具同样不会下发
+
+### 变更
+
+- 工具模式下自动在专家系统提示词后附加简短的工具使用说明
+- 兼容性说明：框架的 agent 工具循环暂不支持透传专家的独立模型名与温度覆盖（`model`/`temperature` 仅在纯文本模式下生效）
+
+### 文档
+
+- README 对比表、安全防护说明与配置表同步更新
+
 ## [v1.1.0] - 2026-08-24
 
 ### 新增 · 配置项

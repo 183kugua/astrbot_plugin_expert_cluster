@@ -11,9 +11,10 @@ astrbot_plugin_expert_cluster / 专家集群插件
 实现说明：
 - LLM 调用使用官方推荐的 Context.llm_generate()（>= v4.5.7），
   Provider 解析优先专家自带 provider_id，否则回退到会话当前对话模型。
-- 专家为纯文本咨询、不携带任何工具，天然不存在专家间无限互相委派的
-  递归风险；防护重点为：单事件咨询熔断、单专家调用上限、超时、
-  问题长度与并发限流。
+- 专家咨询默认通过 tool_loop_agent 携带一组函数工具（白名单可在配置中
+  调整或整体关闭，不可用时自动回退纯文本）；委派类工具被硬性排除，
+  结构上杜绝专家间无限互相委派的递归。防护重点为：单事件咨询熔断、
+  单专家调用上限、超时、问题长度与并发限流。
 - 灵感来源：astrbot_plugin_subagent_worktogether（详见 README）。
 """
 
@@ -29,12 +30,23 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import llm_tool
 from astrbot.api.star import Context, Star, register
 
+try:  # v4.5.7+ 提供的工具集类型；缺失时专家工具能力自动降级关闭
+    from astrbot.core.agent.tool import ToolSet
+except ImportError:  # pragma: no cover
+    ToolSet = None  # type: ignore[assignment]
+
 # 单次事件内的熔断计数存放在 event extra 中，事件结束随对象回收
 _CONSULT_COUNTS_KEY = "_expert_cluster_consult_counts"
 _TOTAL_CONSULTS_KEY = "_expert_cluster_total_consults"
 
 # 结构化错误前缀：让 LLM 能区分"系统错误"与"专家的正常回答"
 _ERROR_PREFIX = "[EXPERT_ERROR]"
+
+# 无论配置如何都不允许下发给专家的工具：会造成专家间递归咨询
+_EXPERT_FORBIDDEN_TOOLS = frozenset({"consult_expert", "convene_expert_panel"})
+
+# 工具模式下追加到专家系统提示词的简短说明
+_EXPERT_TOOL_HINT = ("\n\n[系统提示] 本次咨询已为你启用函数工具，需要查证信息时可主动调用。调用失败或不需要时，直接基于自身知识回答即可。")
 
 _PANEL_STYLES: dict[str, str] = {
     "balanced": (
@@ -162,6 +174,23 @@ class ExpertClusterPlugin(Star):
             cfg.get("summary_provider_id", "")
         ).strip()
         self.summary_model: str = str(cfg.get("summary_model", "")).strip()
+
+        # ---- 专家函数工具（v1.2.0）----
+        # 是否允许专家在回答时通过完整工具循环调用函数工具
+        self.expert_tools_enabled: bool = bool(
+            cfg.get("expert_tools_enabled", True)
+        )
+        # 专家可用的全局函数工具名（逗号分隔）；委派类工具恒被排除
+        self.expert_tool_names_raw: str = str(
+            cfg.get(
+                "expert_tool_names",
+                "list_experts, search_experts, get_expert_usage",
+            )
+        ).strip()
+        # 单次专家咨询内的最大工具调用轮数
+        self.expert_max_tool_steps: int = min(
+            _safe_int(cfg.get("expert_max_tool_steps", 5), 5, min_val=1), 20
+        )
 
         # 会诊并发限流信号量（插件级共享）
         self._semaphore = asyncio.Semaphore(self.panel_max_parallel)
@@ -411,6 +440,52 @@ class ExpertClusterPlugin(Star):
         except Exception as e:
             raise ValueError(f"当前会话没有可用的对话模型：{e}") from e
 
+    def _build_expert_tool_set(self) -> ToolSet | None:
+        """按配置构建专家可用的函数工具集；返回 None 表示回退纯文本咨询。
+
+        防护规则：
+        - 委派类工具（consult/convene）恒被排除，避免专家互相委派递归；
+        - 已在 WebUI 停用（active=False）的工具不下发；
+        - 全局工具管理器不可用时自动降级为纯文本模式。
+        """
+        if ToolSet is None or not self.expert_tools_enabled:
+            return None
+        names = [
+            n.strip() for n in self.expert_tool_names_raw.split(",") if n.strip()
+        ]
+        if not names:
+            return None
+        blocked = sorted(set(names) & _EXPERT_FORBIDDEN_TOOLS)
+        if blocked:
+            logger.warning(
+                "expert_tool_names 含有会引发专家递归咨询的工具（%s），"
+                "已自动排除",
+                "、".join(blocked),
+            )
+            names = [n for n in names if n not in _EXPERT_FORBIDDEN_TOOLS]
+            if not names:
+                return None
+        try:
+            full_set = self.context.get_llm_tool_manager().get_full_tool_set()
+        except Exception as e:
+            logger.warning("获取全局函数工具失败，专家咨询回退为纯文本：%s", e)
+            return None
+        tool_set = ToolSet()
+        missing: list[str] = []
+        for name in names:
+            tool = full_set.get_tool(name)  # 已含权限守卫包装
+            if tool is None:
+                missing.append(name)
+                continue
+            if not getattr(tool, "active", True):
+                continue  # 面板中停用的工具静默跳过
+            tool_set.add_tool(tool)
+        if missing:
+            logger.warning(
+                "expert_tool_names 中未注册的工具已跳过：%s", "、".join(missing)
+            )
+        return None if tool_set.empty() else tool_set
+
     async def _ask_expert(
         self, event: AstrMessageEvent, expert: Expert, question: str
     ) -> str:
@@ -430,19 +505,44 @@ class ExpertClusterPlugin(Star):
         # 可选：附带最近会话记录，让专家了解对话背景
         prompt = question + await self._get_recent_context(event)
 
+        # 专家工具：可用时走 tool_loop_agent 完整工具循环
+        tool_set = self._build_expert_tool_set()
+        system_prompt = expert.system_prompt + (
+            _EXPERT_TOOL_HINT if tool_set else ""
+        )
+        if tool_set and extra_kwargs:
+            # 框架的 agent 工具循环暂不透传 model/temperature（见 README）
+            logger.debug(
+                "工具模式下专家 '%s' 的 model/temperature 覆盖暂不生效",
+                expert.display_name,
+            )
+
         attempts = self.retry_on_failure + 1
         async with self._semaphore:
             for attempt in range(1, attempts + 1):
                 try:
-                    resp = await asyncio.wait_for(
-                        self.context.llm_generate(
-                            chat_provider_id=provider_id,
-                            prompt=prompt,
-                            system_prompt=expert.system_prompt,
-                            **extra_kwargs,
-                        ),
-                        timeout=self.expert_timeout,
-                    )
+                    if tool_set is not None:
+                        resp = await asyncio.wait_for(
+                            self.context.tool_loop_agent(
+                                event=event,
+                                chat_provider_id=provider_id,
+                                prompt=prompt,
+                                system_prompt=system_prompt,
+                                tools=tool_set,
+                                max_steps=self.expert_max_tool_steps,
+                            ),
+                            timeout=self.expert_timeout,
+                        )
+                    else:
+                        resp = await asyncio.wait_for(
+                            self.context.llm_generate(
+                                chat_provider_id=provider_id,
+                                prompt=prompt,
+                                system_prompt=system_prompt,
+                                **extra_kwargs,
+                            ),
+                            timeout=self.expert_timeout,
+                        )
                     break
                 except asyncio.TimeoutError:
                     # 超时不重试：等待时间会成倍放大，直接取消

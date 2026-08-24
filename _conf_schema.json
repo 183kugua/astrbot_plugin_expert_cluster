@@ -272,5 +272,23 @@
     "type": "string",
     "hint": "配合上一项使用；留空用该 Provider 的默认模型。",
     "default": ""
+  },
+  "expert_tools_enabled": {
+    "description": "启用专家函数工具",
+    "type": "bool",
+    "hint": "开启后专家在回答前可通过完整工具循环调用下方配置的函数工具查证信息；工具不可用时自动回退纯文本咨询。",
+    "default": true
+  },
+  "expert_tool_names": {
+    "description": "专家可用工具名单",
+    "type": "string",
+    "hint": "逗号分隔的全局函数工具名，默认为本插件的三个只读信息工具。consult_expert 与 convene_expert_panel 会被强制排除以防递归；未注册或已在面板停用的工具不会下发。",
+    "default": "list_experts, search_experts, get_expert_usage"
+  },
+  "expert_max_tool_steps": {
+    "description": "单次咨询工具循环上限",
+    "type": "int",
+    "hint": "每位专家单次咨询内最多进行的工具调用轮数（1-20），防止 token 失控。注意：工具循环暂不支持透传专家的独立模型与温度设置。",
+    "default": 5
   }
 }
