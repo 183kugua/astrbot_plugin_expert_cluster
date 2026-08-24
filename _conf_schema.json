@@ -1,0 +1,102 @@
+{
+  "experts": {
+    "description": "专家团队成员列表",
+    "type": "template_list",
+    "hint": "点击下方下拉框选择模板添加专家。每位专家可独立配置系统提示词与模型；provider_id / model 留空则使用当前会话的对话模型。修改后请重载插件生效。",
+    "obvious_hint": true,
+    "templates": {
+      "translator": {
+        "name": "翻译专家（预置模板）",
+        "display_item": "display_name",
+        "items": {
+          "name": { "description": "唯一标识（工具调用用，建议英文小写）", "type": "string", "default": "translator" },
+          "display_name": { "description": "展示名", "type": "string", "default": "翻译专家" },
+          "description": { "description": "擅长领域（主模型据此决定咨询谁）", "type": "string", "default": "精通多语种互译，熟悉本地化与文化差异" },
+          "system_prompt": { "description": "专家系统提示词", "type": "text", "default": "你是一位资深翻译专家，精通中英日等多语种。回答时先给出译文，再简要说明关键翻译取舍。" },
+          "provider_id": { "description": "指定对话模型 ID（留空用会话默认）", "type": "string", "default": "" },
+          "model": { "description": "强制指定模型名（留空用默认）", "type": "string", "default": "" }
+        }
+      },
+      "coder": {
+        "name": "代码专家（预置模板）",
+        "display_item": "display_name",
+        "items": {
+          "name": { "description": "唯一标识（工具调用用，建议英文小写）", "type": "string", "default": "coder" },
+          "display_name": { "description": "展示名", "type": "string", "default": "代码专家" },
+          "description": { "description": "擅长领域（主模型据此决定咨询谁）", "type": "string", "default": "擅长编程、调试、架构设计与代码审查" },
+          "system_prompt": { "description": "专家系统提示词", "type": "text", "default": "你是一位资深软件工程师。回答时给出可直接运行的代码，并解释关键设计决策。" },
+          "provider_id": { "description": "指定对话模型 ID（留空用会话默认）", "type": "string", "default": "" },
+          "model": { "description": "强制指定模型名（留空用默认）", "type": "string", "default": "" }
+        }
+      },
+      "reviewer": {
+        "name": "审稿专家（预置模板）",
+        "display_item": "display_name",
+        "items": {
+          "name": { "description": "唯一标识（工具调用用，建议英文小写）", "type": "string", "default": "reviewer" },
+          "display_name": { "description": "展示名", "type": "string", "default": "审稿专家" },
+          "description": { "description": "擅长领域（主模型据此决定咨询谁）", "type": "string", "default": "擅长事实核查、逻辑漏洞与表达问题审查" },
+          "system_prompt": { "description": "专家系统提示词", "type": "text", "default": "你是一位严格的审稿人。对给定内容进行事实核查与逻辑审查，逐条列出问题与改进建议，按严重程度排序。" },
+          "provider_id": { "description": "指定对话模型 ID（留空用会话默认）", "type": "string", "default": "" },
+          "model": { "description": "强制指定模型名（留空用默认）", "type": "string", "default": "" }
+        }
+      },
+      "custom": {
+        "name": "空白专家（自定义模板）",
+        "display_item": "display_name",
+        "items": {
+          "name": { "description": "唯一标识（工具调用用，建议英文小写）", "type": "string", "default": "" },
+          "display_name": { "description": "展示名", "type": "string", "default": "" },
+          "description": { "description": "擅长领域（主模型据此决定咨询谁）", "type": "string", "default": "" },
+          "system_prompt": { "description": "专家系统提示词", "type": "text", "default": "" },
+          "provider_id": { "description": "指定对话模型 ID（留空用会话默认）", "type": "string", "default": "" },
+          "model": { "description": "强制指定模型名（留空用默认）", "type": "string", "default": "" }
+        }
+      }
+    },
+    "default": []
+  },
+  "max_consults_per_event": {
+    "description": "单次对话咨询总配额",
+    "type": "int",
+    "hint": "一次用户消息触发的所有专家咨询（含会诊）总次数上限，防止 token 失控。",
+    "default": 12
+  },
+  "max_calls_per_expert": {
+    "description": "单专家调用上限",
+    "type": "int",
+    "hint": "同一次对话中，同一位专家最多被咨询的次数。",
+    "default": 4
+  },
+  "expert_timeout": {
+    "description": "单次咨询超时（秒）",
+    "type": "float",
+    "hint": "专家超过该时间未回复将被取消并返回错误。会议汇总的超时为该值的 2 倍。",
+    "default": 90.0
+  },
+  "max_question_length": {
+    "description": "问题长度上限（字符）",
+    "type": "int",
+    "hint": "超过该长度的问题会被直接拒绝，防止 token 浪费。",
+    "default": 4000
+  },
+  "panel_max_parallel": {
+    "description": "会诊最大并发数",
+    "type": "int",
+    "hint": "专家会议同时请求模型的最大并发数，避免触发 API 限流。",
+    "default": 3
+  },
+  "panel_style": {
+    "description": "会议汇总风格",
+    "type": "string",
+    "options": ["balanced", "critical", "concise"],
+    "hint": "balanced=综合各方意见；critical=交叉质询后给出严谨结论；concise=只保留精简结论。仅影响 /panel 指令的主持人汇总。",
+    "default": "balanced"
+  },
+  "panel_render_image": {
+    "description": "会议纪要渲染为图片",
+    "type": "bool",
+    "hint": "开启后 /panel 的会议纪要以图片发送（依赖文转图服务），失败自动回退纯文本。",
+    "default": false
+  }
+}
