@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [v1.2.1] - 2026-08-24
+
+### 变更 · 市场上架准备
+
+- `metadata.yaml` 版本号去掉 `v` 前缀（`1.2.1`），对齐 AstrBot 插件市场 JSON 规范
+- 全量通过 ruff check / ruff format：折行修复 10 处超长 docstring，统一代码格式；无功能改动
+
 ## [v1.2.0] - 2026-08-24
 
 ### 新增 · 专家函数工具

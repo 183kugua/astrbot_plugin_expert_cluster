@@ -46,7 +46,10 @@ _ERROR_PREFIX = "[EXPERT_ERROR]"
 _EXPERT_FORBIDDEN_TOOLS = frozenset({"consult_expert", "convene_expert_panel"})
 
 # 工具模式下追加到专家系统提示词的简短说明
-_EXPERT_TOOL_HINT = ("\n\n[系统提示] 本次咨询已为你启用函数工具，需要查证信息时可主动调用。调用失败或不需要时，直接基于自身知识回答即可。")
+_EXPERT_TOOL_HINT = (
+    "\n\n[系统提示] 本次咨询已为你启用函数工具，需要查证信息时可主动调用。"
+    "调用失败或不需要时，直接基于自身知识回答即可。"
+)
 
 _PANEL_STYLES: dict[str, str] = {
     "balanced": (
@@ -162,24 +165,18 @@ class ExpertClusterPlugin(Star):
             cfg.get("panel_default_experts", "")
         ).strip()
         # 单场会议参会人数上限（含 /panel 与 convene_expert_panel）
-        self.max_panel_size: int = _safe_int(
-            cfg.get("max_panel_size", 8), 8, min_val=1
-        )
+        self.max_panel_size: int = _safe_int(cfg.get("max_panel_size", 8), 8, min_val=1)
         # 主持人汇总阶段相对单次咨询的超时倍率
         self.panel_timeout_multiplier: float = _safe_float(
             cfg.get("panel_timeout_multiplier", 2.0), 2.0, min_val=1.0
         )
         # 主持人汇总可使用独立的对话模型
-        self.summary_provider_id: str = str(
-            cfg.get("summary_provider_id", "")
-        ).strip()
+        self.summary_provider_id: str = str(cfg.get("summary_provider_id", "")).strip()
         self.summary_model: str = str(cfg.get("summary_model", "")).strip()
 
         # ---- 专家函数工具（v1.2.0）----
         # 是否允许专家在回答时通过完整工具循环调用函数工具
-        self.expert_tools_enabled: bool = bool(
-            cfg.get("expert_tools_enabled", True)
-        )
+        self.expert_tools_enabled: bool = bool(cfg.get("expert_tools_enabled", True))
         # 专家可用的全局函数工具名（逗号分隔）；委派类工具恒被排除
         self.expert_tool_names_raw: str = str(
             cfg.get(
@@ -332,9 +329,7 @@ class ExpertClusterPlugin(Star):
         try:
             self._stats_path.parent.mkdir(parents=True, exist_ok=True)
             data = {
-                "total_calls": {
-                    e.name: e.total_calls for e in self.experts.values()
-                }
+                "total_calls": {e.name: e.total_calls for e in self.experts.values()}
             }
             self._stats_path.write_text(
                 json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -450,16 +445,13 @@ class ExpertClusterPlugin(Star):
         """
         if ToolSet is None or not self.expert_tools_enabled:
             return None
-        names = [
-            n.strip() for n in self.expert_tool_names_raw.split(",") if n.strip()
-        ]
+        names = [n.strip() for n in self.expert_tool_names_raw.split(",") if n.strip()]
         if not names:
             return None
         blocked = sorted(set(names) & _EXPERT_FORBIDDEN_TOOLS)
         if blocked:
             logger.warning(
-                "expert_tool_names 含有会引发专家递归咨询的工具（%s），"
-                "已自动排除",
+                "expert_tool_names 含有会引发专家递归咨询的工具（%s），已自动排除",
                 "、".join(blocked),
             )
             names = [n for n in names if n not in _EXPERT_FORBIDDEN_TOOLS]
@@ -507,9 +499,7 @@ class ExpertClusterPlugin(Star):
 
         # 专家工具：可用时走 tool_loop_agent 完整工具循环
         tool_set = self._build_expert_tool_set()
-        system_prompt = expert.system_prompt + (
-            _EXPERT_TOOL_HINT if tool_set else ""
-        )
+        system_prompt = expert.system_prompt + (_EXPERT_TOOL_HINT if tool_set else "")
         if tool_set and extra_kwargs:
             # 框架的 agent 工具循环暂不透传 model/temperature（见 README）
             logger.debug(
@@ -566,13 +556,10 @@ class ExpertClusterPlugin(Star):
                         exc_info=True,
                     )
                     return (
-                        f"{_ERROR_PREFIX} 咨询专家 '{expert.display_name}' "
-                        f"时出错：{e}"
+                        f"{_ERROR_PREFIX} 咨询专家 '{expert.display_name}' 时出错：{e}"
                     )
             else:  # pragma: no cover - 循环耗尽理论上不可达
-                return (
-                    f"{_ERROR_PREFIX} 咨询专家 '{expert.display_name}' 时出错。"
-                )
+                return f"{_ERROR_PREFIX} 咨询专家 '{expert.display_name}' 时出错。"
 
         text = (resp.completion_text or "").strip()
         if not text:
@@ -635,7 +622,8 @@ class ExpertClusterPlugin(Star):
 
     @llm_tool(name="list_experts")
     async def list_experts(self, event: AstrMessageEvent) -> str:
-        """List all experts in the cluster with their name, expertise and quota usage. Use this before consult_expert if unsure which expert fits the request."""
+        """List all experts in the cluster with their name, expertise and quota usage.
+        Use this before consult_expert if unsure which expert fits the request."""
         if not self.experts:
             return (
                 f"{_ERROR_PREFIX} 专家集群为空。"
@@ -663,10 +651,10 @@ class ExpertClusterPlugin(Star):
     # ------------------------------------------------------------------ #
 
     @llm_tool(name="search_experts")
-    async def search_experts(
-        self, event: AstrMessageEvent, keyword: str
-    ) -> str:
-        """Search experts by keyword, matching expert name, display name, expertise description and tags. Use this to locate the right expert(s) when the cluster is large; convene_expert_panel accepts tags as participants too."""
+    async def search_experts(self, event: AstrMessageEvent, keyword: str) -> str:
+        """Search experts by keyword, matching expert name, display name, expertise
+        description and tags. Use this to locate the right expert(s) when the cluster
+        is large; convene_expert_panel accepts tags as participants too."""
         if not self.experts:
             return (
                 f"{_ERROR_PREFIX} 专家集群为空。"
@@ -693,11 +681,17 @@ class ExpertClusterPlugin(Star):
         tip = ""
         if any(e.tags for e in self.experts.values()):
             tip = "\n提示：convene_expert_panel 的参会名单可直接填写标签实现按组召集。"
-        return f"匹配 '{keyword}' 的专家共 {len(matched)} 位：\n" + "\n".join(matched) + tip
+        return (
+            f"匹配 '{keyword}' 的专家共 {len(matched)} 位：\n"
+            + "\n".join(matched)
+            + tip
+        )
 
     @llm_tool(name="get_expert_usage")
     async def get_expert_usage(self, event: AstrMessageEvent) -> str:
-        """Get usage statistics for the expert cluster: overall conversation quota and per-expert call counts. Use this to check remaining quota before consult_expert or convene_expert_panel, especially before long panels."""
+        """Get usage statistics for the expert cluster: overall conversation quota and
+        per-expert call counts. Use this to check remaining quota before consult_expert
+        or convene_expert_panel, especially before long panels."""
         counts = self._get_counts(event)
         lines = [
             f"本次对话总配额：{self._get_total(event)}/{self.max_consults_per_event}",
@@ -721,13 +715,19 @@ class ExpertClusterPlugin(Star):
     async def consult_expert(
         self, event: AstrMessageEvent, expert_name: str, question: str
     ) -> str:
-        """Consult a specific expert from the cluster and get the expert's professional answer. Use this when the user's request needs specialized knowledge (legal, medical, coding, translation, etc.). Use list_experts first if unsure which expert to ask.
+        """Consult a specific expert from the cluster and get the expert's professional
+        answer. Use this when the user's request needs specialized knowledge (legal,
+        medical, coding, translation, etc.). Use list_experts first if unsure which
+        expert to ask.
 
-        IMPORTANT: If the result starts with "[EXPERT_ERROR]", the consultation failed at system level (quota, timeout, config...). Do NOT treat it as the expert's answer; answer by yourself or try another expert.
+        IMPORTANT: If the result starts with "[EXPERT_ERROR]", the consultation failed at
+        system level (quota, timeout, config...). Do NOT treat it as the expert's answer;
+        answer by yourself or try another expert.
 
         Args:
             expert_name(string): The expert's name, exactly as listed by list_experts.
-            question(string): A SELF-CONTAINED question. Include all necessary context and background - the expert cannot see this conversation.
+            question(string): A SELF-CONTAINED question. Include all necessary context and
+            background - the expert cannot see this conversation.
         """
         # 输入校验
         if not expert_name or not expert_name.strip():
@@ -777,13 +777,19 @@ class ExpertClusterPlugin(Star):
     async def convene_expert_panel(
         self, event: AstrMessageEvent, question: str, expert_names: str = ""
     ) -> str:
-        """Convene an expert panel: consult several experts IN PARALLEL with the same question and return all their opinions. Then synthesize a final answer yourself from those opinions. Use this for complex questions that benefit from multiple professional perspectives.
+        """Convene an expert panel: consult several experts IN PARALLEL with the same
+        question and return all their opinions. Then synthesize a final answer yourself
+        from those opinions. Use this for complex questions that benefit from multiple
+        professional perspectives.
 
-        Note: each consulted expert counts toward per-expert and total quota. If some results start with "[EXPERT_ERROR]", synthesize based on the successful ones or answer by yourself.
+        Note: each consulted expert counts toward per-expert and total quota. If some
+        results start with "[EXPERT_ERROR]", synthesize based on the successful ones
+        or answer by yourself.
 
         Args:
             question(string): A SELF-CONTAINED question with all necessary context.
-            expert_names(string): Comma-separated expert names to convene, e.g. "coder,reviewer". Leave EMPTY to convene ALL experts.
+            expert_names(string): Comma-separated expert names to convene,
+            e.g. "coder,reviewer". Leave EMPTY to convene ALL experts.
         """
         if err := self._validate_question(question):
             return err
