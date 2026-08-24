@@ -1,5 +1,5 @@
 """
-astrbot_plugin_expert_cluster / 群英会插件
+astrbot_plugin_expert_cluster / 专家集群插件
 
 为主 Agent 配备一支可随时召集的专家团队：
 - 专家在 WebUI 插件配置中以 template_list 可视化管理，
@@ -96,11 +96,11 @@ def _safe_float(
 @register(
     "astrbot_plugin_expert_cluster",
     "kugua",
-    "群英会：为主 Agent 配备可随时咨询与会诊的专家团队",
+    "专家集群：为主 Agent 配备可随时咨询与会诊的专家团队",
     "1.0.0",
 )
 class ExpertClusterPlugin(Star):
-    """群英会插件主类。"""
+    """专家集群插件主类。"""
 
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)
@@ -138,7 +138,7 @@ class ExpertClusterPlugin(Star):
         self._load_experts(cfg.get("experts", []))
 
         logger.info(
-            "群英会已加载：%d 位专家（%s）",
+            "专家集群已加载：%d 位专家（%s）",
             len(self.experts),
             ", ".join(e.name for e in self.experts.values()) or "无",
         )
@@ -347,7 +347,7 @@ class ExpertClusterPlugin(Star):
         """List all experts in the cluster with their name, expertise and quota usage. Use this before consult_expert if unsure which expert fits the request."""
         if not self.experts:
             return (
-                f"{_ERROR_PREFIX} 群英会为空。"
+                f"{_ERROR_PREFIX} 专家集群为空。"
                 "请提醒用户在 WebUI 插件配置中添加专家后再试。"
             )
         counts = self._get_counts(event)
@@ -443,7 +443,7 @@ class ExpertClusterPlugin(Star):
 
         if not self.experts:
             return (
-                f"{_ERROR_PREFIX} 群英会为空，无法召开会议。"
+                f"{_ERROR_PREFIX} 专家集群为空，无法召开会议。"
                 "请提醒用户在 WebUI 插件配置中添加专家。"
             )
 
@@ -516,7 +516,7 @@ class ExpertClusterPlugin(Star):
         """列出专家团队的所有成员及其擅长领域。"""
         if not self.experts:
             yield event.plain_result(
-                "群英会是空的喵…请在 WebUI 插件配置页的「专家团队成员列表」中添加专家。"
+                "专家集群是空的喵…请在 WebUI 插件配置页的「专家团队成员列表」中添加专家。"
             )
             return
         lines = ["🎓 当前专家团队：\n"]
@@ -554,7 +554,7 @@ class ExpertClusterPlugin(Star):
 
         if not self.experts:
             yield event.plain_result(
-                "群英会是空的，无法开会喵。请先在 WebUI 插件配置页添加专家。"
+                "专家集群是空的，无法开会喵。请先在 WebUI 插件配置页添加专家。"
             )
             return
         if err := self._validate_question(text):
@@ -635,4 +635,4 @@ class ExpertClusterPlugin(Star):
     async def terminate(self):
         """插件卸载/停用时调用。"""
         total = sum(e.total_calls for e in self.experts.values())
-        logger.info("群英会插件已卸载，运行期间累计咨询 %d 次", total)
+        logger.info("专家集群插件已卸载，运行期间累计咨询 %d 次", total)

@@ -1,4 +1,4 @@
-# 群英会 astrbot_plugin_expert_cluster
+# 专家集群 astrbot_plugin_expert_cluster
 
 为主 Agent 配备一支**可随时召集的专家团队**。每位专家拥有独立的系统提示词，可指定独立的模型提供商（Provider）与模型；主 Agent 在对话中可以自主判断，向单个专家咨询，或召开多专家并行会诊后汇总结论。
 
