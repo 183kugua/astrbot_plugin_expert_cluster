@@ -55,10 +55,29 @@ _ERROR_PREFIX = "[EXPERT_ERROR]"
 # 无论配置如何都不允许下发给专家的工具：会造成专家间递归咨询
 _EXPERT_FORBIDDEN_TOOLS = frozenset({"consult_expert", "convene_expert_panel"})
 
+# 保留类工具：无论用户如何配置都不下发给专家，防止越权行为
+# - send_message_to_user：专家以 Bot 身份直接给用户发消息，身份与责任混乱；
+# - future_task：专家遗留的定时任务会在咨询结束后长期生效。
+_EXPERT_RESERVED_TOOLS = frozenset({"send_message_to_user", "future_task"})
+
+# v1.4.x 时代的基础工具默认名单（仅信息查询）
+_LEGACY_BASE_TOOL_NAMES = "list_experts, search_experts, get_expert_usage"
+
+# 动手工具包（v1.5.0）：让专家可直接参与制作环节的制作类工具默认名单
+_CREATION_TOOL_NAMES = (
+    "astrbot_execute_shell, astrbot_execute_python, astrbot_shell_session, "
+    "astrbot_file_read_tool, astrbot_file_write_tool, astrbot_file_edit_tool, "
+    "astrbot_grep_tool, web_search_tavily, tavily_extract_web_page, astr_kb_search"
+)
+
 # 工具模式下追加到专家系统提示词的简短说明
 _EXPERT_TOOL_HINT = (
-    "\n\n[系统提示] 本次咨询已为你启用函数工具，需要查证信息时可主动调用。"
-    "调用失败或不需要时，直接基于自身知识回答即可。"
+    "\n\n[系统提示] 本次咨询已为你启用函数工具。你不只是回答问题，"
+    "还可以直接动手参与制作：需要事实依据时先联网检索或读文件查证；"
+    "涉及代码或方案验证时，用 shell/Python 实际运行确认后再下结论；"
+    "被明确委托制作任务时可直接读写、编辑工作区文件完成相应部分，"
+    "并在回答中简要说明你做了哪些操作与结果。所有改动应克制、可回滚，"
+    "不做与当前问题无关的破坏性操作；工具调用失败时说明原因并给出替代建议。"
 )
 
 # 智能调度：判断是否召集专家所用的系统提示词，要求严格 JSON 输出
@@ -241,16 +260,26 @@ class ExpertClusterPlugin(Star):
         # ---- 专家函数工具（v1.2.0）----
         # 是否允许专家在回答时通过完整工具循环调用函数工具
         self.expert_tools_enabled: bool = bool(cfg.get("expert_tools_enabled", True))
-        # 专家可用的全局函数工具名（逗号分隔）；委派类工具恒被排除
+        # 专家可用的全局函数工具名（逗号分隔）；留空表示放行全部工具（委派/保留类恒被排除）
         self.expert_tool_names_raw: str = str(
             cfg.get(
                 "expert_tool_names",
                 "list_experts, search_experts, get_expert_usage",
             )
         ).strip()
-        # 单次专家咨询内的最大工具调用轮数
+        # 动手工具包（v1.5.0）：在基础名单外叠加制作类工具，让专家直接参与制作
+        self.expert_creation_tools_enabled: bool = bool(
+            cfg.get("expert_creation_tools_enabled", True)
+        )
+        self.expert_creation_tool_names_raw: str = str(
+            cfg.get("expert_creation_tool_names", _CREATION_TOOL_NAMES)
+        ).strip()
+        # 单次专家咨询内的最大工具调用轮数；未改动的 v1.4.x 旧默认(5)自动升到 8
+        raw_steps = cfg.get("expert_max_tool_steps", 8)
+        if str(raw_steps).strip() == "5":
+            raw_steps = 8
         self.expert_max_tool_steps: int = min(
-            _safe_int(cfg.get("expert_max_tool_steps", 5), 5, min_val=1), 20
+            _safe_int(raw_steps, 8, min_val=1), 20
         )
 
         # 会诊并发限流信号量（插件级共享）
@@ -561,7 +590,10 @@ class ExpertClusterPlugin(Star):
         """按配置构建专家可用的函数工具集；返回 None 表示回退纯文本咨询。
 
         防护规则：
-        - 委派类工具（consult/convene）恒被排除，避免专家互相委派递归；
+        - 名单留空表示放行全部全局工具（委派/保留类仍恒被排除，
+          动手工具包显式关闭时其制作类工具一并排除）；
+        - 委派类工具（consult/convene）与保留类工具（send_message_to_user、
+          future_task）恒被排除，防递归咨询与越权行为；
         - 已在 WebUI 停用（active=False）的工具不下发；
         - 全局工具管理器不可用时自动降级为纯文本模式。
         """
@@ -571,16 +603,37 @@ class ExpertClusterPlugin(Star):
         # 延迟到首次真实咨询时构建最稳妥，之后直接复用
         if self._tool_set_built:
             return self._cached_tool_set
-        names = [n.strip() for n in self.expert_tool_names_raw.split(",") if n.strip()]
-        if not names:
-            return None
-        blocked = sorted(set(names) & _EXPERT_FORBIDDEN_TOOLS)
-        if blocked:
-            logger.warning(
-                "expert_tool_names 含有会引发专家递归咨询的工具（%s），已自动排除",
-                "、".join(blocked),
-            )
-            names = [n for n in names if n not in _EXPERT_FORBIDDEN_TOOLS]
+        base_names = [
+            n.strip() for n in self.expert_tool_names_raw.split(",") if n.strip()
+        ]
+        creation_names = [
+            n.strip()
+            for n in self.expert_creation_tool_names_raw.split(",")
+            if n.strip()
+        ]
+        allow_all = not base_names  # 名单留空 = 放行全部工具（见下方排除逻辑）
+        names = list(base_names)
+        if names and self.expert_creation_tools_enabled and creation_names:
+            # 动手工具包按序叠加，重复项只保留首次出现
+            for n in creation_names:
+                if n not in names:
+                    names.append(n)
+        if not allow_all:
+            # 显式名单模式：委派/保留类误配置告警并剔除；全部剔除后回退纯文本
+            blocked = sorted(set(names) & _EXPERT_FORBIDDEN_TOOLS)
+            if blocked:
+                logger.warning(
+                    "专家工具名单含有会引发递归咨询的工具（%s），已自动排除",
+                    "、".join(blocked),
+                )
+                names = [n for n in names if n not in _EXPERT_FORBIDDEN_TOOLS]
+            reserved = sorted(set(names) & _EXPERT_RESERVED_TOOLS)
+            if reserved:
+                logger.warning(
+                    "专家工具名单含有保留类越权工具（%s），已强制排除",
+                    "、".join(reserved),
+                )
+                names = [n for n in names if n not in _EXPERT_RESERVED_TOOLS]
             if not names:
                 return None
         try:
@@ -589,19 +642,36 @@ class ExpertClusterPlugin(Star):
             logger.warning("获取全局函数工具失败，专家咨询回退为纯文本：%s", e)
             return None
         tool_set = ToolSet()
-        missing: list[str] = []
-        for name in names:
-            tool = full_set.get_tool(name)  # 已含权限守卫包装
-            if tool is None:
-                missing.append(name)
-                continue
-            if not getattr(tool, "active", True):
-                continue  # 面板中停用的工具静默跳过
-            tool_set.add_tool(tool)
-        if missing:
-            logger.warning(
-                "expert_tool_names 中未注册的工具已跳过：%s", "、".join(missing)
+        if allow_all:
+            # 留空名单：放行全部全局工具；安全排除集恒生效，
+            # 动手工具包显式关闭时其名单内的制作类工具也一并排除
+            excluded = set(_EXPERT_FORBIDDEN_TOOLS) | set(_EXPERT_RESERVED_TOOLS)
+            if not self.expert_creation_tools_enabled:
+                excluded |= set(creation_names)
+            for tool in full_set.tools:
+                name = getattr(tool, "name", "")
+                if not name or name in excluded:
+                    continue
+                if not getattr(tool, "active", True):
+                    continue  # 面板中停用的工具静默跳过
+                tool_set.add_tool(tool)
+            logger.info(
+                "专家可用工具名单为空：已放行 %d 个全局工具", len(tool_set.tools)
             )
+        else:
+            missing: list[str] = []
+            for name in names:
+                tool = full_set.get_tool(name)  # 已含权限守卫包装
+                if tool is None:
+                    missing.append(name)
+                    continue
+                if not getattr(tool, "active", True):
+                    continue  # 面板中停用的工具静默跳过
+                tool_set.add_tool(tool)
+            if missing:
+                logger.warning(
+                    "expert_tool_names 中未注册的工具已跳过：%s", "、".join(missing)
+                )
         result = None if tool_set.empty() else tool_set
         self._cached_tool_set = result
         self._tool_set_built = True

@@ -8,6 +8,7 @@
 - 🧠 **主 Agent 自主决策**：以 LLM 函数工具（function-calling）形式接入，无需固定触发词，主模型自行判断何时咨询谁
 - ⚡ **并行会诊**：`convene_expert_panel` 并行咨询多位专家，信号量限流防 API 过载
 - 🛠️ **专家也能用工具**（v1.2.0）：专家回答前可调用函数工具查证信息，白名单机制防递归
+- 🧰 **动手工具包**（v1.5.0）：专家可运行 shell/Python、读写编辑文件、联网检索，直接参与制作环节而不只是口头建议
 - 🎯 **灵活参会名单**（v1.3.0）：专家 name 与分组 tag 混合填写、自动去重，显式名单与 `/panel` 统一解析
 - 👥 **可视化配置**：WebUI 表格化增删改专家，支持独立模型、温度与分组标签
 - 🛡️ **多层防护**：全局熔断、单专家限额、超时控制、并发限流、配额预检
@@ -127,19 +128,20 @@ WebUI 配置页「专家团队成员列表」下方下拉框可选择模板一�
 | `/experts`（别名：专家列表、专家团队） | 列出专家团队及各专家累计咨询次数 |
 | `/panel <问题>`（别名：专家会议、会诊） | 直接召开专家会议：按 `panel_default_experts` 名单（留空为全体）并行咨询 → 按 `panel_style` 汇总 → 输出纪要 |
 
-## 专家函数工具（v1.2.0）
+## 专家函数工具（v1.2.0 / v1.5.0 动手包）
 
-开启 `expert_tools_enabled` 后，每位专家在回答前可通过 `tool_loop_agent` 完整工具循环调用函数工具查证信息。
+开启 `expert_tools_enabled` 后，每位专家在回答前可通过 `tool_loop_agent` 完整工具循环调用函数工具；再开启 `expert_creation_tools_enabled`（默认开启）时叠加"动手工具包"，专家可直接参与制作：跑命令验证、读写编辑工作区文件、联网查证，并在回答中汇报所做操作与结果。
 
 **工作机制**
 
-- 白名单：只有 `expert_tool_names` 中列出的工具会下发给专家，默认为本插件的三个只读信息工具 `list_experts, search_experts, get_expert_usage`
+- 双名单：`expert_tool_names` 基础名单（默认三个只读信息工具）+ `expert_creation_tool_names` 动手包名单（默认 shell/Python 执行、会话管理、文件读/写/改、grep、Tavily 搜索与网页提取、知识库检索），按序合并去重后下发
+- 强制排除：委派类工具防递归；保留类工具 `send_message_to_user` / `future_task` 无论配置如何均不下发（防越权发消息、防遗留定时任务）
 - 防递归硬保护：`consult_expert` 与 `convene_expert_panel` 被强制排除，即使误配进白名单也会自动剔除并记录警告日志
 - 停用联动：在 WebUI 中停用的全局工具不会下发给专家
 - 自动降级：工具集为空或获取失败时自动回退原纯文本咨询模式，不影响可用性
-- 步数上限：每位专家单次咨询最多进行 `expert_max_tool_steps` 轮工具调用（1-20）
+- 步数上限：每位专家单次咨询最多进行 `expert_max_tool_steps` 轮工具调用（1-20，默认 8）
 
-**扩展玩法**：想让代码专家联网搜资料？在 `expert_tool_names` 里加上你环境中已有的搜索类工具名即可（逗号分隔）。工具名需与本插件或其他插件注册的 LLM 工具一致。
+**扩展玩法**：v1.5.0 起代码专家默认已带联网搜索与文件读写能力；想给专家更多本领（如浏览器自动化），把对应全局工具名追加进任一名单即可（逗号分隔）。工具名需与本插件或其他插件注册的 LLM 工具一致。
 
 **注意事项**：框架的 agent 工具循环暂不支持透传专家的独立模型名与温度覆盖，`provider_id` 选择仍生效，但 `model` / `expert_temperature` 仅在关闭专家工具的纯文本模式下生效。
 
@@ -167,7 +169,9 @@ WebUI 配置页「专家团队成员列表」下方下拉框可选择模板一�
 | `summary_provider_id` | string | 空 | 主持人汇总使用的独立对话模型 ID；留空跟随当前会话 |
 | `summary_model` | string | 空 | 汇总强制指定的模型名；配合上一项使用 |
 | `expert_tools_enabled` | bool | true | 专家是否可在回答中调用函数工具（完整工具循环，不可用时回退纯文本） |
-| `expert_tool_names` | string | 见上文 | 专家可用全局工具名（逗号分隔）；委派类工具强制排除 |
+| `expert_creation_tools_enabled` | bool | true | 动手工具包开关；关闭时专家仅用基础名单，退回信息查询模式 |
+| `expert_creation_tool_names` | string | 见上文 | 动手包制作类工具名（逗号分隔），与基础名单叠加；保留类工具强制排除 |
+| `expert_tool_names` | string | 见上文 | 专家可用全局基础工具名（逗号分隔）；委派类工具强制排除 |
 | `expert_max_tool_steps` | int | 5 | 单次专家咨询的最大工具调用轮数（1-20） |
 
 ### panel_style 三种风格
