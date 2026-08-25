@@ -1,3 +1,15 @@
+## [v1.3.8] - 2026-08-25
+
+### 修正
+
+- 应主人要求移除本轮误加的白名单功能：会话级访问控制（access_control）与工具白名单开关均已撤销，专家功能恢复对全部会话开放
+- 清理 main.py 中所有白名单守卫残留并修复缩进问题，py_compile 通过
+
+### 配置文件优化（保留）
+
+- `panel_style` 下拉框增加中文标签（综合 / 质询 / 精简）
+- `expert_temperature` 改为滑条控件（-1 ~ 2，步进 0.1），参考 AstrBot 官方 schema 规范
+
 # 更新日志 (Changelog)
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。

@@ -352,6 +352,7 @@
     },
     "default": []
   },
+
   "max_consults_per_event": {
     "description": "单次对话咨询总配额",
     "type": "int",
@@ -390,6 +391,11 @@
       "critical",
       "concise"
     ],
+    "labels": [
+      "综合（综合各方意见）",
+      "质询（交叉质询后严谨结论）",
+      "精简（只保留精简结论）"
+    ],
     "hint": "balanced=综合各方意见；critical=交叉质询后给出严谨结论；concise=只保留精简结论。仅影响 /panel 指令的主持人汇总。",
     "default": "balanced"
   },
@@ -402,6 +408,11 @@
   "expert_temperature": {
     "description": "专家生成温度",
     "type": "float",
+    "slider": {
+      "min": -1,
+      "max": 2,
+      "step": 0.1
+    },
     "hint": "0=最严谨，1=均衡，2=最发散。设为 -1 表示不向模型传递该参数（跟随服务商默认值）。",
     "default": 1.0
   },
