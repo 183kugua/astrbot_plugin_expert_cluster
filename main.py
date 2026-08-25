@@ -7,6 +7,10 @@ astrbot_plugin_expert_cluster / 专家集群插件
 - 主 LLM 可通过 function-calling 向单个专家咨询（consult_expert）
 - 也可召开多专家会诊（convene_expert_panel），并行收集意见后由主 LLM 汇总
 - 提供 /experts、/panel 聊天指令，不依赖 function-calling 也能直接使用
+- 全局默认模型：专家未单独指定时统一回退，配置多位专家更省心
+- 智能调度（可选）：每条消息先由调度模型判断是否需要召集专家，
+  判断模型留空则使用会话当前对话模型；需要时自动完成咨询并把
+  专家意见注入本次请求，供主模型融合回答
 
 实现说明：
 - LLM 调用使用官方推荐的 Context.llm_generate()（>= v4.5.7），
@@ -35,6 +39,11 @@ try:  # v4.5.7+ 提供的工具集类型；缺失时专家工具能力自动降�
 except ImportError:  # pragma: no cover
     ToolSet = None  # type: ignore[assignment]
 
+try:  # on_llm_request 钩子的请求实体；仅作类型标注，缺失不影响运行
+    from astrbot.api.provider import ProviderRequest
+except ImportError:  # pragma: no cover
+    ProviderRequest = None  # type: ignore[assignment]
+
 # 单次事件内的熔断计数存放在 event extra 中，事件结束随对象回收
 _CONSULT_COUNTS_KEY = "_expert_cluster_consult_counts"
 _TOTAL_CONSULTS_KEY = "_expert_cluster_total_consults"
@@ -49,6 +58,26 @@ _EXPERT_FORBIDDEN_TOOLS = frozenset({"consult_expert", "convene_expert_panel"})
 _EXPERT_TOOL_HINT = (
     "\n\n[系统提示] 本次咨询已为你启用函数工具，需要查证信息时可主动调用。"
     "调用失败或不需要时，直接基于自身知识回答即可。"
+)
+
+# 智能调度：判断是否召集专家所用的系统提示词，要求严格 JSON 输出
+_DISPATCH_SYSTEM_PROMPT = (
+    "你是专家集群的调度器。根据用户消息和可用专家名单，判断是否有必要"
+    "召集专家协助回答本次请求。\n"
+    "判定标准：仅当问题明显落在某位专家的擅长领域、需要多角度专业论证、"
+    "或用户明确要求专家/会诊时返回 true；日常闲聊、简单问答、寒暄或"
+    "与任何专家领域无关的请求一律返回 false。\n"
+    "experts 填写建议参与的专家 name（按相关度排序）；panel 表示是否"
+    "适合多专家会诊（仅当确实需要多领域交叉论证时为 true）。\n"
+    "只输出如下 JSON，不要输出任何其他文字：\n"
+    '{"need": true, "panel": false, "experts": ["name1"], "reason": "简短理由"}'
+)
+
+# 智能调度命中后注入主模型系统提示词的意见标头
+_DISPATCH_INJECT_HEADER = (
+    "\n\n[专家参考意见] 智能调度已根据用户消息自动咨询了以下专家。"
+    "请结合这些意见回答用户：吸收可靠观点并自然融合成你自己的回答，"
+    "不要原样罗列；发现明显错误时以你的判断为准。"
 )
 
 _PANEL_STYLES: dict[str, str] = {
@@ -174,6 +203,23 @@ class ExpertClusterPlugin(Star):
         self.summary_provider_id: str = str(cfg.get("summary_provider_id", "")).strip()
         self.summary_model: str = str(cfg.get("summary_model", "")).strip()
 
+        # ---- 全局默认模型（v1.4.0）----
+        # 所有专家未单独指定 provider 时的统一回退；再留空才用会话当前模型
+        self.default_provider_id: str = str(
+            cfg.get("default_provider_id", "")
+        ).strip()
+        self.default_model: str = str(cfg.get("default_model", "")).strip()
+
+        # ---- 智能调度（v1.4.0）----
+        # 开启后每条消息先由调度模型判断是否需要召集专家
+        self.auto_dispatch_enabled: bool = bool(
+            cfg.get("auto_dispatch_enabled", False)
+        )
+        self.dispatch_provider_id: str = str(
+            cfg.get("dispatch_provider_id", "")
+        ).strip()
+        self.dispatch_model: str = str(cfg.get("dispatch_model", "")).strip()
+
         # ---- 专家函数工具（v1.2.0）----
         # 是否允许专家在回答时通过完整工具循环调用函数工具
         self.expert_tools_enabled: bool = bool(cfg.get("expert_tools_enabled", True))
@@ -206,10 +252,6 @@ class ExpertClusterPlugin(Star):
             len(self.experts),
             ", ".join(e.name for e in self.experts.values()) or "无",
         )
-
-    # ------------------------------------------------------------------ #
-    # 使用范围控制
-    # ------------------------------------------------------------------ #
 
     # ------------------------------------------------------------------ #
     # 配置解析
@@ -454,8 +496,8 @@ class ExpertClusterPlugin(Star):
     ) -> str:
         """解析专家应使用的对话模型 ID。
 
-        优先专家自带 provider_id（需存在且为文本生成类型），
-        否则回退到当前会话正在使用的对话模型。
+        回退链：专家自带 provider_id → 全局默认 provider_id →
+        当前会话正在使用的对话模型。每一级都要求存在且为文本生成类型，
         失败时抛 ValueError，由调用方转换为 [EXPERT_ERROR]。
         """
         if expert.provider_id:
@@ -472,6 +514,24 @@ class ExpertClusterPlugin(Star):
                 )
             return expert.provider_id
 
+        # 回退 1：全局默认 Provider（配置多位专家时无需逐个指定）
+        if self.default_provider_id:
+            prov = self.context.get_provider_by_id(
+                provider_id=self.default_provider_id
+            )
+            if prov is None:
+                raise ValueError(
+                    f"全局默认 provider_id '{self.default_provider_id}' "
+                    f"不存在，请检查插件配置"
+                )
+            if not hasattr(prov, "text_chat"):
+                raise ValueError(
+                    f"全局默认 provider_id '{self.default_provider_id}' "
+                    "不是文本生成类型的模型服务"
+                )
+            return self.default_provider_id
+
+        # 回退 2：当前会话正在使用的对话模型
         try:
             return await self.context.get_current_chat_provider_id(
                 umo=event.unified_msg_origin
@@ -539,9 +599,13 @@ class ExpertClusterPlugin(Star):
             return f"{_ERROR_PREFIX} {e}"
 
         extra_kwargs: dict = {}
-        if expert.model:
+        # 模型名回退链：专家自带 > 全局默认（仅当专家未指定 provider 时）> 不传
+        model_override = expert.model or (
+            "" if expert.provider_id else self.default_model
+        )
+        if model_override:
             # llm_generate 的 **kwargs 会透传给 Provider.text_chat(model=...)
-            extra_kwargs["model"] = expert.model
+            extra_kwargs["model"] = model_override
         if self.expert_temperature >= 0:
             extra_kwargs["temperature"] = self.expert_temperature
 
@@ -666,6 +730,133 @@ class ExpertClusterPlugin(Star):
         if not summary:
             raise ValueError("汇总模型返回空回复")
         return summary
+
+    # ------------------------------------------------------------------ #
+    # 智能调度：自动判断是否召集专家（v1.4.0）
+    # ------------------------------------------------------------------ #
+
+    def _expert_roster_text(self) -> str:
+        """生成供调度模型阅读的专家名单。"""
+        lines = []
+        for e in self.experts.values():
+            tags = f"，标签：{','.join(e.tags)}" if e.tags else ""
+            lines.append(f"- {e.name}（{e.display_name}）：{e.description}{tags}")
+        return "\n".join(lines)
+
+    async def _judge_dispatch(
+        self, event: AstrMessageEvent, prompt: str
+    ) -> dict | None:
+        """调用调度模型判断本条消息是否需要专家参与。
+
+        返回解析后的决策字典；任何失败都返回 None 并由调用方静默跳过，
+        绝不影响正常对话流程。调度模型回退链与专家一致：
+        dispatch_provider_id → 当前会话对话模型。
+        """
+        if self.dispatch_provider_id:
+            provider_id = self.dispatch_provider_id
+        else:
+            try:
+                provider_id = await self.context.get_current_chat_provider_id(
+                    umo=event.unified_msg_origin
+                )
+            except Exception as e:
+                logger.warning("智能调度无法获取会话模型，已跳过：%s", e)
+                return None
+        extra_kwargs: dict = {}
+        if self.dispatch_model:
+            extra_kwargs["model"] = self.dispatch_model
+
+        judge_prompt = (
+            f"可用专家名单：\n{self._expert_roster_text() or '（无）'}\n\n"
+            f"用户消息：\n{prompt[:1500]}\n\n"
+            "请输出判断结果。"
+        )
+        try:
+            resp = await asyncio.wait_for(
+                self.context.llm_generate(
+                    chat_provider_id=provider_id,
+                    prompt=judge_prompt,
+                    system_prompt=_DISPATCH_SYSTEM_PROMPT,
+                    **extra_kwargs,
+                ),
+                timeout=self.expert_timeout,
+            )
+        except Exception as e:
+            logger.warning("智能调度判断失败，已跳过：%s", e)
+            return None
+
+        text = (resp.completion_text or "").strip()
+        # 容错解析：剥掉代码块围栏后截取第一个 {...}
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text[:4].lower() == "json":
+                text = text[4:]
+        start, end = text.find("{"), text.rfind("}")
+        if start == -1 or end <= start:
+            return None
+        try:
+            decision = json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            return None
+        return decision if isinstance(decision, dict) else None
+
+    @filter.on_llm_request()
+    async def _auto_dispatch_judge(self, event: AstrMessageEvent, req) -> None:
+        """LLM 请求前钩子：按需自动召集专家并把参考意见注入本次请求。"""
+        if not self.auto_dispatch_enabled or not self.experts:
+            return
+        prompt = (req.prompt or "").strip()
+        if not prompt:
+            return
+        # 同一事件只调度一次；咨询总配额耗尽时也直接放行主模型自答
+        if event.get_extra("_expert_cluster_dispatched", False):
+            return
+        event.set_extra("_expert_cluster_dispatched", True)
+        if self._get_total(event) >= self.max_consults_per_event:
+            return
+
+        decision = await self._judge_dispatch(event, prompt)
+        if not decision or not decision.get("need"):
+            return
+
+        names = [
+            str(n)
+            for n in (decision.get("experts") or [])
+        ][: self.max_panel_size]
+        targets = [t for t in (self._find_expert(n) for n in names) if t]
+        if not targets:
+            logger.info("智能调度：判定需专家但名单未匹配，已跳过")
+            return
+        # 会诊需至少 2 位有效专家，否则降级为单专家咨询
+        use_panel = bool(decision.get("panel")) and len(targets) >= 2
+        consult_targets = targets if use_panel else targets[:1]
+
+        async def _consult(expert: Expert):
+            async with self._semaphore:
+                return expert, await self._ask_expert(event, expert, prompt)
+
+        results = await asyncio.gather(
+            *(_consult(e) for e in consult_targets), return_exceptions=True
+        )
+        pairs: list[tuple[Expert, str]] = []
+        for item in results:
+            if isinstance(item, BaseException):
+                logger.warning("智能调度咨询异常：%s", item)
+                continue
+            expert, answer = item
+            if not answer.startswith(_ERROR_PREFIX):
+                pairs.append((expert, answer))
+        if not pairs:
+            return  # 全部失败时不打扰主模型
+
+        opinions = self._format_opinions(pairs)
+        req.system_prompt = ((req.system_prompt or "") + _DISPATCH_INJECT_HEADER + "\n" + opinions).strip()
+        mode = "会诊" if use_panel else "单专家咨询"
+        logger.info(
+            "智能调度：%s完成（%s），意见已注入本次请求",
+            mode,
+            "、".join(e.display_name for e, _ in pairs),
+        )
 
     # ------------------------------------------------------------------ #
     # LLM 工具：list_experts
