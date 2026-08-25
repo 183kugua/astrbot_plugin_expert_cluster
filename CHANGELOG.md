@@ -2,6 +2,16 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [v1.3.5] - 2026-08-25
+
+### 新增
+
+- **预设专家模板 ×4**：新增「写作专家」「学习辅导专家」「数据分析专家」「法律顾问」四套预置模板（含系统提示词、标签与 Provider 下拉选择），预置模板总数达 7 套
+
+### 修复
+
+- **修复 LLM 工具参数丢失**：`search_experts` / `consult_expert` / `convene_expert_panel` 的 Google 风格 docstring 存在两处格式问题——参数类型缺空格（`name(string):` → `name (string):`）以及参数描述续行缩进不足（与参数名平齐被解析器误判为新条目），导致 docstring 解析失败、注册到模型端的工具 schema 参数为空，模型无法正确传参；已按标准格式修正并补全 `search_experts` 缺失的 `keyword` 参数声明
+
 ## [v1.3.1] - 2026-08-25
 
 ### 变更

@@ -134,6 +134,178 @@
           }
         }
       },
+      "writer": {
+        "name": "写作专家（预置模板）",
+        "display_item": "display_name",
+        "items": {
+          "name": {
+            "description": "唯一标识（工具调用用，建议英文小写）",
+            "type": "string",
+            "default": "writer"
+          },
+          "display_name": {
+            "description": "展示名",
+            "type": "string",
+            "default": "写作专家"
+          },
+          "description": {
+            "description": "擅长领域（主模型据此决定咨询谁）",
+            "type": "string",
+            "default": "各类文案写作、文章润色、创意构思与风格改写"
+          },
+          "system_prompt": {
+            "description": "专家系统提示词",
+            "type": "text",
+            "default": "你是一位资深写作专家，擅长公文、新媒体文案、小说与演讲稿等多种文体。回答时先给出成稿，再用一两句话说明写作思路或可调整方向；用户要求润色时保留原意并指出主要改动点。"
+          },
+          "provider_id": {
+            "description": "对话模型 Provider（下拉选择）",
+            "type": "string",
+            "_special": "select_provider",
+            "hint": "从 WebUI 已配置的对话提供商中下拉选择；留空则使用当前会话的对话模型。",
+            "default": ""
+          },
+          "model": {
+            "description": "强制指定模型名（留空用默认）",
+            "type": "string",
+            "default": ""
+          },
+          "tags": {
+            "description": "分组标签（逗号分隔，可选）",
+            "type": "string",
+            "default": "写作,文案,润色"
+          }
+        }
+      },
+      "teacher": {
+        "name": "学习辅导专家（预置模板）",
+        "display_item": "display_name",
+        "items": {
+          "name": {
+            "description": "唯一标识（工具调用用，建议英文小写）",
+            "type": "string",
+            "default": "teacher"
+          },
+          "display_name": {
+            "description": "展示名",
+            "type": "string",
+            "default": "学习辅导专家"
+          },
+          "description": {
+            "description": "擅长领域（主模型据此决定咨询谁）",
+            "type": "string",
+            "default": "概念讲解、答疑解惑、制定学习计划与出题练习"
+          },
+          "system_prompt": {
+            "description": "专家系统提示词",
+            "type": "text",
+            "default": "你是一位耐心的学习辅导老师，善于把复杂概念拆解成循序渐进的小步骤，多用类比和例子。回答时先给结论，再分步讲解；学生理解有偏差时先温和纠错再引导，最后可以出一两道小练习巩固。"
+          },
+          "provider_id": {
+            "description": "对话模型 Provider（下拉选择）",
+            "type": "string",
+            "_special": "select_provider",
+            "hint": "从 WebUI 已配置的对话提供商中下拉选择；留空则使用当前会话的对话模型。",
+            "default": ""
+          },
+          "model": {
+            "description": "强制指定模型名（留空用默认）",
+            "type": "string",
+            "default": ""
+          },
+          "tags": {
+            "description": "分组标签（逗号分隔，可选）",
+            "type": "string",
+            "default": "教育,讲解,答疑"
+          }
+        }
+      },
+      "data_analyst": {
+        "name": "数据分析专家（预置模板）",
+        "display_item": "display_name",
+        "items": {
+          "name": {
+            "description": "唯一标识（工具调用用，建议英文小写）",
+            "type": "string",
+            "default": "data_analyst"
+          },
+          "display_name": {
+            "description": "展示名",
+            "type": "string",
+            "default": "数据分析专家"
+          },
+          "description": {
+            "description": "擅长领域（主模型据此决定咨询谁）",
+            "type": "string",
+            "default": "数据解读、统计方法建议、指标口径与图表选型"
+          },
+          "system_prompt": {
+            "description": "专家系统提示词",
+            "type": "text",
+            "default": "你是一位严谨的数据分析专家，擅长统计方法、指标体系与可视化选型。回答时先明确数据口径与分析目标，再给方法和结论；涉及推断时主动提示样本量与置信度等前提，不确定处明确说明假设。"
+          },
+          "provider_id": {
+            "description": "对话模型 Provider（下拉选择）",
+            "type": "string",
+            "_special": "select_provider",
+            "hint": "从 WebUI 已配置的对话提供商中下拉选择；留空则使用当前会话的对话模型。",
+            "default": ""
+          },
+          "model": {
+            "description": "强制指定模型名（留空用默认）",
+            "type": "string",
+            "default": ""
+          },
+          "tags": {
+            "description": "分组标签（逗号分隔，可选）",
+            "type": "string",
+            "default": "数据,统计,分析"
+          }
+        }
+      },
+      "lawyer": {
+        "name": "法律顾问（预置模板）",
+        "display_item": "display_name",
+        "items": {
+          "name": {
+            "description": "唯一标识（工具调用用，建议英文小写）",
+            "type": "string",
+            "default": "lawyer"
+          },
+          "display_name": {
+            "description": "展示名",
+            "type": "string",
+            "default": "法律顾问"
+          },
+          "description": {
+            "description": "擅长领域（主模型据此决定咨询谁）",
+            "type": "string",
+            "default": "法律知识参考、常见纠纷处理思路与文书要点指引"
+          },
+          "system_prompt": {
+            "description": "专家系统提示词",
+            "type": "text",
+            "default": "你是一位法律知识顾问，熟悉中国现行法律框架与常见实务流程。回答时先给出参考结论与依据的法律领域，再列行动建议；始终提醒用户你的回答仅供参考，重大事项请咨询执业律师并提供完整证据材料。"
+          },
+          "provider_id": {
+            "description": "对话模型 Provider（下拉选择）",
+            "type": "string",
+            "_special": "select_provider",
+            "hint": "从 WebUI 已配置的对话提供商中下拉选择；留空则使用当前会话的对话模型。",
+            "default": ""
+          },
+          "model": {
+            "description": "强制指定模型名（留空用默认）",
+            "type": "string",
+            "default": ""
+          },
+          "tags": {
+            "description": "分组标签（逗号分隔，可选）",
+            "type": "string",
+            "default": "法律,合规,参考"
+          }
+        }
+      },
       "custom": {
         "name": "空白专家（自定义模板）",
         "display_item": "display_name",

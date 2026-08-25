@@ -701,7 +701,12 @@ class ExpertClusterPlugin(Star):
     async def search_experts(self, event: AstrMessageEvent, keyword: str) -> str:
         """Search experts by keyword, matching expert name, display name, expertise
         description and tags. Use this to locate the right expert(s) when the cluster
-        is large; convene_expert_panel accepts tags as participants too."""
+        is large; convene_expert_panel accepts tags as participants too.
+
+        Args:
+            keyword (string): The search keyword to match against expert names,
+              display names, expertise descriptions and tags.
+        """
         if not self.experts:
             return (
                 f"{_ERROR_PREFIX} 专家集群为空。"
@@ -772,9 +777,9 @@ class ExpertClusterPlugin(Star):
         answer by yourself or try another expert.
 
         Args:
-            expert_name(string): The expert's name, exactly as listed by list_experts.
-            question(string): A SELF-CONTAINED question. Include all necessary context and
-            background - the expert cannot see this conversation.
+            expert_name (string): The expert's name, exactly as listed by list_experts.
+            question (string): A SELF-CONTAINED question. Include all necessary context
+              and background - the expert cannot see this conversation.
         """
         # 输入校验
         if not expert_name or not expert_name.strip():
@@ -836,9 +841,9 @@ class ExpertClusterPlugin(Star):
         or answer by yourself.
 
         Args:
-            question(string): A SELF-CONTAINED question with all necessary context.
-            expert_names(string): Comma-separated expert names to convene,
-            e.g. "coder,reviewer". Leave EMPTY to convene ALL experts.
+            question (string): A SELF-CONTAINED question with all necessary context.
+            expert_names (string): Comma-separated expert names to convene,
+              e.g. "coder,reviewer". Leave EMPTY to convene ALL experts.
         """
         if err := self._validate_question(question):
             return err
