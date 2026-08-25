@@ -599,10 +599,13 @@ class ExpertClusterPlugin(Star):
             return f"{_ERROR_PREFIX} {e}"
 
         extra_kwargs: dict = {}
-        # 模型名回退链：专家自带 > 全局默认（仅当专家未指定 provider 时）> 不传
-        model_override = expert.model or (
-            "" if expert.provider_id else self.default_model
-        )
+        # 模型名回退链：专家自带 > 全局默认（须与全局默认 Provider 配套，
+        # 见配置 hint「配合上一项使用」）> 不传。
+        # 单独设置 default_model 而未设 default_provider_id 时不生效，
+        # 避免把别的 Provider 的模型名强加给会话当前模型导致报错。
+        model_override = expert.model
+        if not model_override and not expert.provider_id and self.default_provider_id:
+            model_override = self.default_model
         if model_override:
             # llm_generate 的 **kwargs 会透传给 Provider.text_chat(model=...)
             extra_kwargs["model"] = model_override
