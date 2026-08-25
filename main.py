@@ -772,6 +772,16 @@ class ExpertClusterPlugin(Star):
         medical, coding, translation, etc.). Use list_experts first if unsure which
         expert to ask.
 
+        PROACTIVE USE - decide yourself, do not wait for an explicit request:
+        - Call DIRECTLY when the request clearly falls within a specialty, or when
+          you lack confidence in key facts; multi-step tasks (roughly 3+ steps) and
+          suspicious bugs/risks also justify consulting.
+        - For LARGE or ambiguous tasks, briefly confirm with the user first.
+        - If borderline, just recommend the /experts command instead of calling.
+        - Quota hygiene: keep a reserve of about 5 total calls per conversation;
+          never re-ask the same expert the same question.
+        - Fallback: on failure or exhausted quota, answer yourself and say so.
+
         IMPORTANT: If the result starts with "[EXPERT_ERROR]", the consultation failed at
         system level (quota, timeout, config...). Do NOT treat it as the expert's answer;
         answer by yourself or try another expert.
@@ -835,6 +845,11 @@ class ExpertClusterPlugin(Star):
         question and return all their opinions. Then synthesize a final answer yourself
         from those opinions. Use this for complex questions that benefit from multiple
         professional perspectives.
+
+        PROACTIVE USE: convene a panel only for genuinely complex questions that need
+        multiple perspectives (multi-domain tradeoffs, high-stakes reviews). For simple
+        single-domain questions prefer consult_expert; if unsure whether a full panel is
+        worth the quota, ask the user first or recommend the /panel command instead.
 
         Note: each consulted expert counts toward per-expert and total quota. If some
         results start with "[EXPERT_ERROR]", synthesize based on the successful ones
