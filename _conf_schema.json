@@ -502,6 +502,24 @@
     "hint": "开启后专家在回答前可通过完整工具循环调用下方配置的函数工具查证信息；工具不可用时自动回退纯文本咨询。",
     "default": true
   },
+  "expert_tools_whitelist_enabled": {
+    "description": "专家工具使用白名单开关",
+    "type": "bool",
+    "hint": "关闭（默认）时不启用白名单，所有会话都可使用 consult_expert / convene_expert_panel；开启后仅下方名单内的用户私聊或群聊可触发（管理员豁免），其余会话主模型会收到未授权提示并自行作答。",
+    "default": false
+  },
+  "whitelist_users": {
+    "description": "允许使用的 QQ 号列表",
+    "type": "string",
+    "hint": "多个 QQ 号可用逗号或空格分隔。开启白名单后：这些用户的私聊放行；他们在任意群里发言个人命中也会放行。",
+    "default": ""
+  },
+  "whitelist_groups": {
+    "description": "允许使用的群号列表",
+    "type": "string",
+    "hint": "多个群号可用逗号或空格分隔。开启白名单后，这些群内的所有成员都可使用专家工具。",
+    "default": ""
+  },
   "expert_tool_names": {
     "description": "专家可用工具名单",
     "type": "string",

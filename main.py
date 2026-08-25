@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -219,6 +220,23 @@ class ExpertClusterPlugin(Star):
             cfg.get("dispatch_provider_id", "")
         ).strip()
         self.dispatch_model: str = str(cfg.get("dispatch_model", "")).strip()
+
+        # ---- 专家工具使用白名单（v1.4.1）----
+        # 开关关闭时不启用白名单，所有会话均可用；开启后仅名单内会话放行
+        self.whitelist_enabled: bool = bool(
+            cfg.get("expert_tools_whitelist_enabled", False)
+        )
+
+        def _split_ids(raw) -> set[str]:
+            """兼容列表 / 逗号 / 空格 / 换行分隔的 ID 列表配置。"""
+            if isinstance(raw, (list, tuple)):
+                parts = [str(x) for x in raw]
+            else:
+                parts = re.split(r"[,，、\s]+", str(raw or ""))
+            return {p.strip() for p in parts if p.strip()}
+
+        self.whitelist_users: set[str] = _split_ids(cfg.get("whitelist_users", ""))
+        self.whitelist_groups: set[str] = _split_ids(cfg.get("whitelist_groups", ""))
 
         # ---- 专家函数工具（v1.2.0）----
         # 是否允许专家在回答时通过完整工具循环调用函数工具
@@ -862,6 +880,43 @@ class ExpertClusterPlugin(Star):
         )
 
     # ------------------------------------------------------------------ #
+    # 专家工具使用白名单（v1.4.1）
+    # ------------------------------------------------------------------ #
+
+    def _check_tool_whitelist(self, event: AstrMessageEvent) -> str | None:
+        """检查当前会话是否允许使用专家咨询类工具。
+
+        开关关闭时直接放行（白名单完全不生效）。
+        返回 None 表示放行；返回字符串为拒绝原因，
+        将作为工具结果回给主模型，由其自行作答并转告用户。
+        """
+        if not self.whitelist_enabled:
+            return None
+        try:  # 管理员豁免
+            if event.is_admin():
+                return None
+        except Exception:
+            pass
+        sender_id = str(event.get_sender_id() or "").strip()
+        group_id = str(event.get_group_id() or "").strip()
+        if group_id:  # 群聊：整群放行 或 发言者个人命中均可
+            allowed = group_id in self.whitelist_groups or (
+                sender_id in self.whitelist_users
+            )
+            scope = f"群 {group_id}"
+        else:  # 私聊：仅用户名单
+            allowed = bool(sender_id) and sender_id in self.whitelist_users
+            scope = f"用户 {sender_id}" if sender_id else "当前会话"
+        if allowed:
+            return None
+        return (
+            f"{_ERROR_PREFIX} 当前会话未被授权使用专家工具"
+            f"（{scope} 不在使用白名单内）。"
+            "请勿重试调用专家工具：由你自己直接回答用户即可，"
+            "并可告知用户如需启用请联系机器人管理员在插件配置中调整白名单。"
+        )
+
+    # ------------------------------------------------------------------ #
     # LLM 工具：list_experts
     # ------------------------------------------------------------------ #
 
@@ -989,6 +1044,8 @@ class ExpertClusterPlugin(Star):
             question (string): A SELF-CONTAINED question. Include all necessary context
               and background - the expert cannot see this conversation.
         """
+        if denied := self._check_tool_whitelist(event):
+            return denied
         # 输入校验
         if not expert_name or not expert_name.strip():
             return f"{_ERROR_PREFIX} expert_name 不能为空。"
@@ -1058,6 +1115,8 @@ class ExpertClusterPlugin(Star):
             expert_names (string): Comma-separated expert names to convene,
               e.g. "coder,reviewer". Leave EMPTY to convene ALL experts.
         """
+        if denied := self._check_tool_whitelist(event):
+            return denied
         if err := self._validate_question(question):
             return err
 
