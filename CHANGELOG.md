@@ -2,6 +2,12 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [v1.3.1] - 2026-08-25
+
+### 变更
+
+- **配置样式优化**：专家模板与汇总配置中的对话模型 Provider 由手动填写 ID 改为 WebUI 下拉框选择（官方 `_special: select_provider`，列出已配置的提供商），共 5 处；留空仍表示使用当前会话的对话模型
+
 ## [v1.3.0] - 2026-08-24
 
 ### 修复 · 深度排查专项

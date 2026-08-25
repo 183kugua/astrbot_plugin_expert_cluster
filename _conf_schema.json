@@ -30,8 +30,10 @@
             "default": "你是一位资深翻译专家，精通中英日等多语种。回答时先给出译文，再简要说明关键翻译取舍。"
           },
           "provider_id": {
-            "description": "指定对话模型 ID（留空用会话默认）",
+            "description": "对话模型 Provider（下拉选择）",
             "type": "string",
+            "_special": "select_provider",
+            "hint": "从 WebUI 已配置的对话提供商中下拉选择；留空则使用当前会话的对话模型。",
             "default": ""
           },
           "model": {
@@ -71,8 +73,10 @@
             "default": "你是一位资深软件工程师。回答时给出可直接运行的代码，并解释关键设计决策。"
           },
           "provider_id": {
-            "description": "指定对话模型 ID（留空用会话默认）",
+            "description": "对话模型 Provider（下拉选择）",
             "type": "string",
+            "_special": "select_provider",
+            "hint": "从 WebUI 已配置的对话提供商中下拉选择；留空则使用当前会话的对话模型。",
             "default": ""
           },
           "model": {
@@ -112,8 +116,10 @@
             "default": "你是一位严格的审稿人。对给定内容进行事实核查与逻辑审查，逐条列出问题与改进建议，按严重程度排序。"
           },
           "provider_id": {
-            "description": "指定对话模型 ID（留空用会话默认）",
+            "description": "对话模型 Provider（下拉选择）",
             "type": "string",
+            "_special": "select_provider",
+            "hint": "从 WebUI 已配置的对话提供商中下拉选择；留空则使用当前会话的对话模型。",
             "default": ""
           },
           "model": {
@@ -153,8 +159,10 @@
             "default": ""
           },
           "provider_id": {
-            "description": "指定对话模型 ID（留空用会话默认）",
+            "description": "对话模型 Provider（下拉选择）",
             "type": "string",
+            "_special": "select_provider",
+            "hint": "从 WebUI 已配置的对话提供商中下拉选择；留空则使用当前会话的对话模型。",
             "default": ""
           },
           "model": {
@@ -262,9 +270,10 @@
     "default": 2.0
   },
   "summary_provider_id": {
-    "description": "汇总使用的对话模型 ID（可选）",
+    "description": "汇总使用的对话模型 Provider（可选）",
     "type": "string",
-    "hint": "为 /panel 主持人指定独立的对话提供者；留空则使用当前会话的对话模型。",
+    "_special": "select_provider",
+    "hint": "为 /panel 主持人下拉选择独立的对话提供商；留空则使用当前会话的对话模型。",
     "default": ""
   },
   "summary_model": {

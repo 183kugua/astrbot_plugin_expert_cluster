@@ -113,7 +113,7 @@ def _safe_float(
     "astrbot_plugin_expert_cluster",
     "kugua",
     "专家集群：为主 Agent 配备可随时咨询与会诊的专家团队",
-    "1.3.0",
+    "1.3.1",
 )
 class ExpertClusterPlugin(Star):
     """专家集群插件主类。"""
